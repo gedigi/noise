@@ -20,7 +20,7 @@ type NoiseConn struct {
 	handshakeComplete bool
 	handshakeMutex    sync.Mutex
 
-	// Authentication thingies
+	// Authentication
 	isRemoteAuthenticated bool
 
 	// input/output
@@ -28,10 +28,6 @@ type NoiseConn struct {
 	inLock, outLock sync.Mutex
 	inputBuffer     []byte
 }
-
-// Access to net.Conn methods.
-// Cannot just embed net.Conn because that would
-// export the struct field too.
 
 // LocalAddr returns the local network address.
 func (c *NoiseConn) LocalAddr() net.Addr {
@@ -103,12 +99,6 @@ func (c *NoiseConn) Write(b []byte) (int, error) {
 		if err != nil {
 			return n, err
 		}
-		/*
-			// TODO: should we test if we sent the correct number of bytes?
-			if _ != len(ciphertext) {
-				return errors.New("Noise: cannot send the whole data")
-			}
-		*/
 
 		// prepare next loop iteration
 		n += m
@@ -191,8 +181,6 @@ func (c *NoiseConn) Read(b []byte) (n int, err error) {
 	c.inputBuffer = c.inputBuffer[:0]
 	return readSoFar, nil
 
-	// TODO: should we continue to try and read other messages?
-
 }
 
 // Close closes the connection.
@@ -200,9 +188,7 @@ func (c *NoiseConn) Close() error {
 	return c.conn.Close()
 }
 
-//
 // Noise-related functions
-//
 
 // Handshake runs the client or server handshake protocol if
 // it has not yet been run.
@@ -294,7 +280,7 @@ func (c *NoiseConn) IsRemoteAuthenticated() bool {
 // It is useful in case the static key is only transmitted during the handshake.
 func (c *NoiseConn) RemoteKeys() ([]byte, []byte, error) {
 	if !c.handshakeComplete {
-		return nil, nil, errors.New("andshake not completed")
+		return nil, nil, errors.New("handshake not completed")
 	}
 	return c.hs.re, c.hs.rs, nil
 }
@@ -302,12 +288,11 @@ func (c *NoiseConn) RemoteKeys() ([]byte, []byte, error) {
 // LocalKeys returns the local keypairs.
 func (c *NoiseConn) LocalKeys() (DHKey, DHKey, error) {
 	if !c.handshakeComplete {
-		return DHKey{}, DHKey{}, errors.New("andshake not completed")
+		return DHKey{}, DHKey{}, errors.New("handshake not completed")
 	}
 	return c.hs.e, c.hs.s, nil
 }
 
-//
 // input/output functions
 
 func readFromUntil(r io.Reader, n int) ([]byte, error) {
@@ -392,46 +377,10 @@ func (timeoutError) Error() string   { return "noise: DialWithDialer timed out" 
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
 
-// this functions checks if at some point in the protocol
-// the peer needs to verify the other peer static public key
-// and if the peer needs to provide a proof for its static public key
-var errNoPubkeyVerifier = errors.New("Noise: no public key verifier set in noise.Config")
-var errNoProof = errors.New("Noise: no public key proof set in noise.Config")
-
-// func checkRequirements(c *noise.Config) (err error) {
-// 	ht := c.Pattern.Name
-// 	switch ht {
-// 	case noise.HandshakeNX.Name:
-// 	case noise.HandshakeKX.Name:
-// 	case noise.HandshakeXX.Name:
-// 	case noise.HandshakeIX.Name:
-// 		if c.isClient && c.PublicKeyVerifier == nil {
-// 			return errNoPubkeyVerifier
-// 		} else if !isClient && config.StaticPublicKeyProof == nil {
-// 			return errNoProof
-// 		}
-// 	}
-// 	if ht == Noise_XN || ht == Noise_XK || ht == Noise_XX || ht == Noise_X || ht == Noise_IN || ht == Noise_IK || ht == Noise_IX {
-// 		if config.isClient && config.StaticPublicKeyProof == nil {
-// 			return errNoProof
-// 		} else if !isClient && config.PublicKeyVerifier == nil {
-// 			return errNoPubkeyVerifier
-// 		}
-// 	}
-// 	if ht == Noise_NNpsk2 && len(config.PreSharedKey) != 32 {
-// 		return errors.New("noise: a 32-byte pre-shared key needs to be passed as noise.Config")
-// 	}
-// 	return nil
-// }
-
 // DialWithDialer connects to the given network address using dialer.Dial and
 // then initiates a Noise handshake, returning the resulting Noise connection. Any
 // timeout or deadline given in the dialer apply to connection and Noise
 // handshake as a whole.
-//
-// DialWithDialer interprets a nil configuration as equivalent to the zero
-// configuration; see the documentation of Config for the defaults.
-// TODO: make sure sane defaults for time outs are set!!!
 func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*NoiseConn, error) {
 	// We want the Timeout and Deadline values from dialer to cover the
 	// whole process: TCP connection and Noise handshake. This means that we
@@ -449,9 +398,6 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 	if config == nil {
 		return nil, errors.New("empty noise.Config")
 	}
-	// if err := checkRequirements(config); err != nil {
-	// 	panic(err)
-	// }
 
 	// Dial the net.Conn first
 	var errChannel chan error
@@ -467,15 +413,6 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: use the following code to implement some sort of SNI extension?
-	/*
-		colonPos := strings.LastIndex(addr, ":")
-		if colonPos == -1 {
-			colonPos = len(addr)
-		}
-		hostname := addr[:colonPos]
-	*/
 
 	// Create the noise.NoiseConn
 	conn := Client(rawConn, config)
@@ -502,9 +439,6 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 // Dial connects to the given network address using net.Dial
 // and then initiates a Noise handshake, returning the resulting
 // Noise connection.
-// Dial interprets a nil configuration as equivalent to
-// the zero configuration; see the documentation of Config
-// for the defaults.
 func Dial(network, addr string, config *Config) (*NoiseConn, error) {
 	return DialWithDialer(new(net.Dialer), network, addr, config)
 }
