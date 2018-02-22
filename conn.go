@@ -304,35 +304,40 @@ func Client(conn net.Conn, config *Config) *Conn {
 	return &Conn{conn: conn, config: config, isClient: true}
 }
 
-// A listener implements a network listener (net.Listener) for Noise connections.
-type listener struct {
+// A Listener implements a network Listener (net.Listener) for Noise connections.
+type Listener struct {
 	net.Listener
 	config *Config
 }
 
 // Accept waits for and returns the next incoming Noise connection.
 // The returned connection is of type *Conn.
-func (l *listener) Accept() (Conn, error) {
+func (l *Listener) Accept() (Conn, error) {
 	c, err := l.Listener.Accept()
 	if err != nil {
 		return Conn{}, err
 	}
 	return Server(c, l.config), nil
 }
-func (l *listener) Close() error {
+
+// Close closes the listener.
+// Any blocked Accept operations will be unblocked and return errors.
+func (l *Listener) Close() error {
 	return l.Listener.Close()
 }
-func (l *listener) Addr() net.Addr {
+
+// Addr returns the listener's network address.
+func (l *Listener) Addr() net.Addr {
 	return l.Listener.Addr()
 }
 
-// Listen creates a Noise listener accepting connections on the
+// Listen creates a Noise Listener accepting connections on the
 // given network address using net.Listen.
 // The configuration config must be non-nil.
-func Listen(network, laddr string, config *Config) (net.Listener, error) {
+func Listen(network, laddr string, config *Config) (Listener, error) {
 	// check Config
 	if config == nil {
-		return nil, errors.New("Noise: no Config set")
+		return Listener{}, errors.New("Noise: no Config set")
 	}
 	// if err := checkRequirements(config); err != nil {
 	// 	panic(err)
@@ -341,11 +346,11 @@ func Listen(network, laddr string, config *Config) (net.Listener, error) {
 	// make net.Conn listen
 	l, err := net.Listen(network, laddr)
 	if err != nil {
-		return nil, err
+		return Listener{}, err
 	}
 
-	// create new noise.listener
-	noiseListener := new(listener)
+	// create new noise.Listener
+	noiseListener := Listener{}
 	noiseListener.Listener = l
 	noiseListener.config = config
 	return noiseListener, nil
