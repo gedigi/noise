@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// NoiseConn represents a secured connection.
+// Conn represents a secured connection.
 // It implements the net.Conn interface.
-type NoiseConn struct {
+type Conn struct {
 	conn     net.Conn
 	isClient bool
 
@@ -30,37 +30,37 @@ type NoiseConn struct {
 }
 
 // LocalAddr returns the local network address.
-func (c *NoiseConn) LocalAddr() net.Addr {
+func (c *Conn) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address.
-func (c *NoiseConn) RemoteAddr() net.Addr {
+func (c *Conn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
 // SetDeadline sets the read and write deadlines associated with the connection.
 // A zero value for t means Read and Write will not time out.
 // After a Write has timed out, the Noise state is corrupt and all future writes will return the same error.
-func (c *NoiseConn) SetDeadline(t time.Time) error {
+func (c *Conn) SetDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
 // SetReadDeadline sets the read deadline on the underlying connection.
 // A zero value for t means Read will not time out.
-func (c *NoiseConn) SetReadDeadline(t time.Time) error {
+func (c *Conn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
 // SetWriteDeadline sets the write deadline on the underlying connection.
 // A zero value for t means Write will not time out.
 // After a Write has timed out, the Noise state is corrupt and all future writes will return the same error.
-func (c *NoiseConn) SetWriteDeadline(t time.Time) error {
+func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 
 // Write writes data to the connection.
-func (c *NoiseConn) Write(b []byte) (int, error) {
+func (c *Conn) Write(b []byte) (int, error) {
 
 	//
 	if hp := c.config.Pattern; !c.isClient && len(hp.Messages) < 2 {
@@ -110,7 +110,7 @@ func (c *NoiseConn) Write(b []byte) (int, error) {
 
 // Read can be made to time out and return a net.Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
-func (c *NoiseConn) Read(b []byte) (n int, err error) {
+func (c *Conn) Read(b []byte) (n int, err error) {
 	// Make sure to go through the handshake first
 	if err = c.Handshake(); err != nil {
 		return
@@ -184,7 +184,7 @@ func (c *NoiseConn) Read(b []byte) (n int, err error) {
 }
 
 // Close closes the connection.
-func (c *NoiseConn) Close() error {
+func (c *Conn) Close() error {
 	return c.conn.Close()
 }
 
@@ -194,7 +194,7 @@ func (c *NoiseConn) Close() error {
 // it has not yet been run.
 // Most uses of this package need not call Handshake explicitly:
 // the first Read or Write will call it automatically.
-func (c *NoiseConn) Handshake() (err error) {
+func (c *Conn) Handshake() (err error) {
 
 	// Locking the handshakeMutex
 	c.handshakeMutex.Lock()
@@ -272,43 +272,17 @@ func (c *NoiseConn) Handshake() (err error) {
 // properly authenticated. It serves no real purpose for the moment as the
 // handshake will not go through if a peer is not properly authenticated in
 // patterns where the peer needs to be authenticated.
-func (c *NoiseConn) IsRemoteAuthenticated() bool {
+func (c *Conn) IsRemoteAuthenticated() bool {
 	return c.isRemoteAuthenticated
 }
 
-// RemoteKeys returns the ephemeral and static keys of the remote peer.
+// RemoteKey returns the static key of the remote peer.
 // It is useful in case the static key is only transmitted during the handshake.
-func (c *NoiseConn) RemoteKeys() ([]byte, []byte, error) {
+func (c *Conn) RemoteKey() ([]byte, error) {
 	if !c.handshakeComplete {
-		return nil, nil, errors.New("handshake not completed")
+		return nil, errors.New("handshake not completed")
 	}
-	return c.hs.re, c.hs.rs, nil
-}
-
-// LocalKeys returns the local keypairs.
-func (c *NoiseConn) LocalKeys() (DHKey, DHKey, error) {
-	if !c.handshakeComplete {
-		return DHKey{}, DHKey{}, errors.New("handshake not completed")
-	}
-	return c.hs.e, c.hs.s, nil
-}
-
-// input/output functions
-
-func readFromUntil(r io.Reader, n int) ([]byte, error) {
-	result := make([]byte, n)
-	offset := 0
-	for {
-		m, err := r.Read(result[offset:])
-		if err != nil {
-			return result, err
-		}
-		offset += m
-		if offset == n {
-			break
-		}
-	}
-	return result, nil
+	return c.hs.rs, nil
 }
 
 // These Utility functions implement the net.Conn interface. Most of this code
@@ -318,16 +292,16 @@ func readFromUntil(r io.Reader, n int) ([]byte, error) {
 // using net.Conn as the underlying transport.
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
-func Server(conn net.Conn, config *Config) *NoiseConn {
-	return &NoiseConn{conn: conn, config: config, isClient: false}
+func Server(conn net.Conn, config *Config) Conn {
+	return Conn{conn: conn, config: config, isClient: false}
 }
 
 // Client returns a new Noise client side connection
 // using conn as the underlying transport.
 // The config cannot be nil: users must set either ServerName or
 // InsecureSkipVerify in the config.
-func Client(conn net.Conn, config *Config) *NoiseConn {
-	return &NoiseConn{conn: conn, config: config, isClient: true}
+func Client(conn net.Conn, config *Config) *Conn {
+	return &Conn{conn: conn, config: config, isClient: true}
 }
 
 // A listener implements a network listener (net.Listener) for Noise connections.
@@ -337,13 +311,19 @@ type listener struct {
 }
 
 // Accept waits for and returns the next incoming Noise connection.
-// The returned connection is of type *NoiseConn.
-func (l *listener) Accept() (net.Conn, error) {
+// The returned connection is of type *Conn.
+func (l *listener) Accept() (Conn, error) {
 	c, err := l.Listener.Accept()
 	if err != nil {
-		return nil, err
+		return Conn{}, err
 	}
 	return Server(c, l.config), nil
+}
+func (l *listener) Close() error {
+	return l.Listener.Close()
+}
+func (l *listener) Addr() net.Addr {
+	return l.Listener.Addr()
 }
 
 // Listen creates a Noise listener accepting connections on the
@@ -381,7 +361,7 @@ func (timeoutError) Temporary() bool { return true }
 // then initiates a Noise handshake, returning the resulting Noise connection. Any
 // timeout or deadline given in the dialer apply to connection and Noise
 // handshake as a whole.
-func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*NoiseConn, error) {
+func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*Conn, error) {
 	// We want the Timeout and Deadline values from dialer to cover the
 	// whole process: TCP connection and Noise handshake. This means that we
 	// also need to start our own timers now.
@@ -414,7 +394,7 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 		return nil, err
 	}
 
-	// Create the noise.NoiseConn
+	// Create the noise.Conn
 	conn := Client(rawConn, config)
 
 	// Do the handshake
@@ -439,6 +419,24 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 // Dial connects to the given network address using net.Dial
 // and then initiates a Noise handshake, returning the resulting
 // Noise connection.
-func Dial(network, addr string, config *Config) (*NoiseConn, error) {
+func Dial(network, addr string, config *Config) (*Conn, error) {
 	return DialWithDialer(new(net.Dialer), network, addr, config)
+}
+
+// input/output functions
+
+func readFromUntil(r io.Reader, n int) ([]byte, error) {
+	result := make([]byte, n)
+	offset := 0
+	for {
+		m, err := r.Read(result[offset:])
+		if err != nil {
+			return result, err
+		}
+		offset += m
+		if offset == n {
+			break
+		}
+	}
+	return result, nil
 }
