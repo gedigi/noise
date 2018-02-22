@@ -110,16 +110,17 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Read can be made to time out and return a net.Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
-func (c *Conn) Read(b []byte) (n int, err error) {
+func (c *Conn) Read(b []byte) (int, error) {
+	var err error
 	// Make sure to go through the handshake first
 	if err = c.Handshake(); err != nil {
-		return
+		return 0, err
 	}
 
 	// Put this after Handshake, in case people were calling
 	// Read(nil) for the side effect of the Handshake.
 	if len(b) == 0 {
-		return
+		return 0, err
 	}
 
 	// If this is a one-way pattern, do some checks
