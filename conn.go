@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// A NoiseConn represents a secured connection.
+// NoiseConn represents a secured connection.
 // It implements the net.Conn interface.
 type NoiseConn struct {
 	conn     net.Conn
@@ -27,10 +27,6 @@ type NoiseConn struct {
 	in, out         *CipherState
 	inLock, outLock sync.Mutex
 	inputBuffer     []byte
-
-	// half duplex
-	isHalfDuplex   bool
-	halfDuplexLock sync.Mutex
 }
 
 // Access to net.Conn methods.
@@ -81,13 +77,8 @@ func (c *NoiseConn) Write(b []byte) (int, error) {
 	}
 
 	// Lock the write socket
-	if c.isHalfDuplex {
-		c.halfDuplexLock.Lock()
-		defer c.halfDuplexLock.Unlock()
-	} else {
-		c.outLock.Lock()
-		defer c.outLock.Unlock()
-	}
+	c.outLock.Lock()
+	defer c.outLock.Unlock()
 
 	// process the data in a loop
 	var n int
@@ -147,13 +138,8 @@ func (c *NoiseConn) Read(b []byte) (n int, err error) {
 	}
 
 	// Lock the read socket
-	if c.isHalfDuplex {
-		c.halfDuplexLock.Lock()
-		defer c.halfDuplexLock.Unlock()
-	} else {
-		c.inLock.Lock()
-		defer c.inLock.Unlock()
-	}
+	c.inLock.Lock()
+	defer c.inLock.Unlock()
 
 	// read whatever there is to read in the buffer
 	readSoFar := 0
@@ -296,23 +282,33 @@ func (c *NoiseConn) Handshake() (err error) {
 	return nil
 }
 
-// IsRemoteAuthenticated can be used to check if the remote peer has been properly authenticated. It serves no real purpose for the moment as the handshake will not go through if a peer is not properly authenticated in patterns where the peer needs to be authenticated.
+// IsRemoteAuthenticated can be used to check if the remote peer has been
+// properly authenticated. It serves no real purpose for the moment as the
+// handshake will not go through if a peer is not properly authenticated in
+// patterns where the peer needs to be authenticated.
 func (c *NoiseConn) IsRemoteAuthenticated() bool {
 	return c.isRemoteAuthenticated
 }
 
-// StaticKey returns the static key of the remote peer. It is useful in case the
-// static key is only transmitted during the handshake.
-// func (c *NoiseConn) StaticKey() ([]byte, error) {
-// 	if !c.handshakeComplete {
-// 		return nil, errors.New("noise: handshake not completed")
-// 	}
-// 	return c.hs.rs[:], nil
-// }
+// RemoteKeys returns the ephemeral and static keys of the remote peer.
+// It is useful in case the static key is only transmitted during the handshake.
+func (c *NoiseConn) RemoteKeys() ([]byte, []byte, error) {
+	if !c.handshakeComplete {
+		return nil, nil, errors.New("andshake not completed")
+	}
+	return c.hs.re, c.hs.rs, nil
+}
+
+// LocalKeys returns the local keypairs.
+func (c *NoiseConn) LocalKeys() (DHKey, DHKey, error) {
+	if !c.handshakeComplete {
+		return DHKey{}, DHKey{}, errors.New("andshake not completed")
+	}
+	return c.hs.e, c.hs.s, nil
+}
 
 //
 // input/output functions
-//
 
 func readFromUntil(r io.Reader, n int) ([]byte, error) {
 	result := make([]byte, n)
@@ -329,13 +325,6 @@ func readFromUntil(r io.Reader, n int) ([]byte, error) {
 	}
 	return result, nil
 }
-
-/*
-TODO: Do we need such a function? (this comes from go.TLS)
-// ConnectionState returns basic Noise details about the connection.
-func (c *NoiseConn) ConnectionState() ConnectionState {
-}
-*/
 
 // These Utility functions implement the net.Conn interface. Most of this code
 // was either taken directly or inspired from Go's crypto/tls package.
@@ -406,8 +395,8 @@ func (timeoutError) Temporary() bool { return true }
 // this functions checks if at some point in the protocol
 // the peer needs to verify the other peer static public key
 // and if the peer needs to provide a proof for its static public key
-var errNoPubkeyVerifier = errors.New("noise: no public key verifier set in noise.Config")
-var errNoProof = errors.New("noise: no public key proof set in noise.Config")
+var errNoPubkeyVerifier = errors.New("Noise: no public key verifier set in noise.Config")
+var errNoProof = errors.New("Noise: no public key proof set in noise.Config")
 
 // func checkRequirements(c *noise.Config) (err error) {
 // 	ht := c.Pattern.Name
