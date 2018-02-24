@@ -2,7 +2,6 @@ package noise
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -411,7 +410,6 @@ func DialWithDialer(dialer *net.Dialer, network, addr, localAddr string, config 
 		IP:   localAddress,
 		Port: localPort,
 	}
-	fmt.Printf("%+v\n", dialer.LocalAddr)
 	rawConn, err := dialer.Dial(network, addr)
 	if err != nil {
 		return nil, err
