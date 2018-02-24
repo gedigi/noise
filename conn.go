@@ -2,8 +2,11 @@ package noise
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -367,7 +370,7 @@ func (timeoutError) Temporary() bool { return true }
 // then initiates a Noise handshake, returning the resulting Noise connection. Any
 // timeout or deadline given in the dialer apply to connection and Noise
 // handshake as a whole.
-func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*Conn, error) {
+func DialWithDialer(dialer *net.Dialer, network, addr, localAddr string, config *Config) (*Conn, error) {
 	// We want the Timeout and Deadline values from dialer to cover the
 	// whole process: TCP connection and Noise handshake. This means that we
 	// also need to start our own timers now.
@@ -394,7 +397,21 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 			errChannel <- timeoutError{}
 		})
 	}
+	localAddrArray := strings.Split(localAddr, ":")
+	if len(localAddrArray) != 2 {
+		return nil, errors.New("invalid source address")
+	}
+	localPort, err := strconv.Atoi(localAddrArray[1])
+	if err != nil {
+		return nil, errors.New("invalid source port")
+	}
+	localAddress := net.ParseIP(localAddrArray[0])
 
+	dialer.LocalAddr = &net.TCPAddr{
+		IP:   localAddress,
+		Port: localPort,
+	}
+	fmt.Printf("%+v\n", dialer.LocalAddr)
 	rawConn, err := dialer.Dial(network, addr)
 	if err != nil {
 		return nil, err
@@ -425,8 +442,8 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 // Dial connects to the given network address using net.Dial
 // and then initiates a Noise handshake, returning the resulting
 // Noise connection.
-func Dial(network, addr string, config *Config) (*Conn, error) {
-	return DialWithDialer(new(net.Dialer), network, addr, config)
+func Dial(network, addr string, localAddr string, config *Config) (*Conn, error) {
+	return DialWithDialer(new(net.Dialer), network, addr, localAddr, config)
 }
 
 // input/output functions
