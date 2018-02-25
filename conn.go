@@ -295,8 +295,8 @@ func (c *Conn) RemoteKey() ([]byte, error) {
 // using net.Conn as the underlying transport.
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
-func Server(conn net.Conn, config *Config) Conn {
-	return Conn{conn: conn, config: config, isClient: false}
+func Server(conn net.Conn, config *Config) *Conn {
+	return &Conn{conn: conn, config: config, isClient: false}
 }
 
 // Client returns a new Noise client side connection
@@ -315,10 +315,10 @@ type Listener struct {
 
 // Accept waits for and returns the next incoming Noise connection.
 // The returned connection is of type *Conn.
-func (l *Listener) Accept() (Conn, error) {
+func (l *Listener) Accept() (*Conn, error) {
 	c, err := l.Listener.Accept()
 	if err != nil {
-		return Conn{}, err
+		return &Conn{}, err
 	}
 	return Server(c, l.config), nil
 }
