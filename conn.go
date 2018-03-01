@@ -1,3 +1,5 @@
+// This code is either inspired from or taken directly from go's tls package
+
 package noise
 
 import (
@@ -97,12 +99,10 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 		// Send data
 		_, err := c.conn.Write(append(length, ciphertext...))
-		// _, err := c.conn.Write(ciphertext)
 		if err != nil {
 			return n, err
 		}
 
-		// prepare next loop iteration
 		n += m
 		data = data[m:]
 	}
@@ -147,7 +147,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	}
 
 	// read header from socket
-	bufHeader, err := readFromUntil(c.conn, 2)
+	bufHeader, err := readBytes(c.conn, 2)
 	if err != nil {
 		return 0, err
 	}
@@ -157,7 +157,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	}
 
 	// read noise message from socket
-	noiseMessage, err := readFromUntil(c.conn, length)
+	noiseMessage, err := readBytes(c.conn, length)
 	if err != nil {
 		return 0, err
 	}
@@ -198,12 +198,9 @@ func (c *Conn) Close() error {
 // Most uses of this package need not call Handshake explicitly:
 // the first Read or Write will call it automatically.
 func (c *Conn) Handshake() (err error) {
-
-	// Locking the handshakeMutex
 	c.handshakeMutex.Lock()
 	defer c.handshakeMutex.Unlock()
 
-	// did we already go through the handshake?
 	if c.handshakeComplete {
 		return nil
 	}
@@ -240,7 +237,7 @@ func (c *Conn) Handshake() (err error) {
 				return err
 			}
 		} else {
-			bufHeader, err := readFromUntil(c.conn, 2)
+			bufHeader, err := readBytes(c.conn, 2)
 			if err != nil {
 				return err
 			}
@@ -249,7 +246,7 @@ func (c *Conn) Handshake() (err error) {
 				return errors.New("Noise: Noise message received exceeds NoiseMessageLength")
 			}
 
-			msg, err = readFromUntil(c.conn, length)
+			msg, err = readBytes(c.conn, length)
 
 			if err != nil {
 				return err
@@ -287,9 +284,6 @@ func (c *Conn) RemoteKey() ([]byte, error) {
 	}
 	return c.hs.rs, nil
 }
-
-// These Utility functions implement the net.Conn interface. Most of this code
-// was either taken directly or inspired from Go's crypto/tls package.
 
 // Server returns a new Noise server side connection
 // using net.Conn as the underlying transport.
@@ -338,21 +332,15 @@ func (l *Listener) Addr() net.Addr {
 // given network address using net.Listen.
 // The configuration config must be non-nil.
 func Listen(network, laddr string, config *Config) (Listener, error) {
-	// check Config
 	if config == nil {
 		return Listener{}, errors.New("Noise: no Config set")
 	}
-	// if err := checkRequirements(config); err != nil {
-	// 	panic(err)
-	// }
 
-	// make net.Conn listen
 	l, err := net.Listen(network, laddr)
 	if err != nil {
 		return Listener{}, err
 	}
 
-	// create new noise.Listener
 	noiseListener := Listener{}
 	noiseListener.Listener = l
 	noiseListener.config = config
@@ -444,9 +432,7 @@ func Dial(network, addr string, localAddr string, config *Config) (*Conn, error)
 	return DialWithDialer(new(net.Dialer), network, addr, localAddr, config)
 }
 
-// input/output functions
-
-func readFromUntil(r io.Reader, n int) ([]byte, error) {
+func readBytes(r io.Reader, n int) ([]byte, error) {
 	result := make([]byte, n)
 	offset := 0
 	for {
