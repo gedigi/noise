@@ -309,7 +309,7 @@ type Listener struct {
 
 // Accept waits for and returns the next incoming Noise connection.
 // The returned connection is of type *Conn.
-func (l *Listener) Accept() (*Conn, error) {
+func (l *Listener) Accept() (net.Conn, error) {
 	c, err := l.Listener.Accept()
 	if err != nil {
 		return &Conn{}, err
@@ -331,17 +331,17 @@ func (l *Listener) Addr() net.Addr {
 // Listen creates a Noise Listener accepting connections on the
 // given network address using net.Listen.
 // The configuration config must be non-nil.
-func Listen(network, laddr string, config *Config) (Listener, error) {
+func Listen(network, laddr string, config *Config) (net.Listener, error) {
 	if config == nil {
-		return Listener{}, errors.New("Noise: no Config set")
+		return &Listener{}, errors.New("Noise: no Config set")
 	}
 
 	l, err := net.Listen(network, laddr)
 	if err != nil {
-		return Listener{}, err
+		return &Listener{}, err
 	}
 
-	noiseListener := Listener{}
+	noiseListener := &Listener{}
 	noiseListener.Listener = l
 	noiseListener.config = config
 	return noiseListener, nil
