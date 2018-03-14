@@ -498,6 +498,12 @@ func (s *HandshakeState) PeerEphemeral() []byte {
 	return s.re
 }
 
+// LocalEphemeral returns the local ephemeral key pair generated during
+// a handshake.
+func (s *HandshakeState) LocalEphemeral() DHKey {
+	return s.e
+}
+
 // MessageIndex returns the current handshake message id
 func (s *HandshakeState) MessageIndex() int {
 	return s.msgIdx
